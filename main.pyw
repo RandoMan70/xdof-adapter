@@ -3,15 +3,18 @@ import socket
 import sys
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
+from PyQt5.QtGui import QIcon
 from PyQt5.QtNetwork import QUdpSocket, QHostAddress
 import win32api
 import keycodes
+import os
 
 serial_port_name = "COM6"
 serlal_port_baudrate = 115200
 
 udp_ip = "127.0.0.33"
 udp_port = 10333
+PROGRAM_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 class NetworkReceiver(QObject):
@@ -179,9 +182,10 @@ class Ui(QtWidgets.QMainWindow):
 
     def __init__(self):
         self.stopped = True
+        self.app_shutdown = False
 
         super(Ui, self).__init__()
-        uic.loadUi('basic.ui', self)
+        uic.loadUi(PROGRAM_DIR + '/basic.ui', self)
 
         self.platform = Platform(serial_port_name, serlal_port_baudrate)
         self.listener = NetworkReceiver(udp_ip, udp_port)
@@ -224,6 +228,13 @@ class Ui(QtWidgets.QMainWindow):
         self.platform.status.connect(self.update_position_bars)
         self.show()
 
+    def closeEvent(self, event):
+        print("CLOSING!")
+        self.set_control_disabled(True)
+        self.app_shutdown = True
+        self.downButton.clicked.emit()
+        event.ignore()
+
     def pressed(self, key):
         if key == "f11":
             self.upButton.clicked.emit()
@@ -244,9 +255,8 @@ class Ui(QtWidgets.QMainWindow):
         )
 
     def set_control_disabled(self, disabled: True):
-        pass
-        # for b in self.buttons:
-        #     b.setDisabled(disabled)
+        for b in self.buttons:
+            b.setDisabled(disabled)
 
     def update_position_bars(self, left_front: int, right_front: int, rear: int, turn: int, wind: int):
         self.platformLeftFront.setValue(left_front)
@@ -275,7 +285,6 @@ class Ui(QtWidgets.QMainWindow):
         if self.path.done():
             self.path = None
             self.timer.stop()
-            self.set_control_disabled(False)
             return
 
         self.path.step()
@@ -288,8 +297,10 @@ class Ui(QtWidgets.QMainWindow):
         self.platform.set_wind(255)
 
     def upButtonPressed(self):
+        if self.app_shutdown:
+            return
+
         print("UP!")
-        self.set_control_disabled(True)
         self.path = Path(4, self.up_process_done)
         self.path.reset([self.platform.left_front, self.platform.right_front, self.platform.rear, self.platform.angle])
         if self.listener.has_data():
@@ -303,13 +314,16 @@ class Ui(QtWidgets.QMainWindow):
             self.path.waypoint_add([127, 127, 127, 100])
         self.timer.start()
 
+    def down_process_done(self):
+        if self.app_shutdown:
+            sys.exit()
+
     def downButtonPressed(self):
         print('DOWN!')
         self.stopped = True
         self.update_status_label()
         self.platform.set_wind(0)
-        self.set_control_disabled(True)
-        self.path = Path(4, None)
+        self.path = Path(4, self.down_process_done)
         self.path.reset([self.platform.left_front, self.platform.right_front, self.platform.rear, self.platform.angle])
 
         p1 = min([self.platform.left_front, self.platform.right_front, self.platform.rear])
@@ -321,5 +335,6 @@ class Ui(QtWidgets.QMainWindow):
 
 
 app = QtWidgets.QApplication(sys.argv)
+app.setWindowIcon(QIcon(PROGRAM_DIR + '/wheel.svg'))
 window = Ui()
 app.exec_()
