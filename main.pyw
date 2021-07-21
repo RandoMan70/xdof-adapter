@@ -14,37 +14,63 @@ import os
 PROGRAM_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_FILE = PROGRAM_DIR + "/settings.ini"
 
-config = configparser.ConfigParser()
-ret = config.read(SETTINGS_FILE)
+class Settings:
+    def __init__(self, path):
+        self.path = path
+        self.config = configparser.ConfigParser()
 
-if len(ret) == 0:
-    print("No settings, initialize defaults")
-    config["serial"] = {
-        "port_name": "COM6",
-        "port_baudrate": "115200"
-    }
-    config["network"] = {
-        "listen_addr": "127.0.0.33",
-        "listen_port": "10333"
-    }
-    config["platform"] = {
-        "time_step_minutes": "6"
-    }
-    with open(SETTINGS_FILE, 'w') as configfile:
-        config.write(configfile)
+        self.serial_port_name = "COM6"
+        self.serial_port_baudrate = 115200
+        self.udp_ip = "127.0.0.33"
+        self.udp_port = 10333
+        self.time_step = 6
+        self.override_wind_speed = 64
 
-serial_port_name = config["serial"]["port_name"]
-serlal_port_baudrate = int(config["serial"]["port_baudrate"])
+        self.load()
 
-udp_ip = config["network"]["listen_addr"]
-udp_port = int(config["network"]["listen_port"])
+    def export(self):
+        self.config["serial"] = {
+            "port_name": self.serial_port_name,
+            "port_baudrate": str(self.serial_port_baudrate)
+        }
+        self.config["network"] = {
+            "listen_addr": self.udp_ip,
+            "listen_port": str(self.udp_port)
+        }
+        self.config["platform"] = {
+            "time_step_minutes": str(self.time_step),
+        }
+        if self.override_wind_speed is not None:
+            self.config["platform"]["override_wind_speed"] = str(self.override_wind_speed)
 
 
-time_step = int(config["platform"]["time_step_minutes"])
+    def extract(self):
+        self.serial_port_name = self.config["serial"]["port_name"]
+        self.serial_port_baudrate = int(self.config["serial"]["port_baudrate"])
 
-override_wind_speed = None
-if 'override_wind_speed' in config["platform"]:
-    override_wind_speed = int(config["platform"]['override_wind_speed'])
+        self.udp_ip = self.config["network"]["listen_addr"]
+        self.udp_port = int(self.config["network"]["listen_port"])
+
+        self.time_step = int(self.config["platform"]["time_step_minutes"])
+
+        self.override_wind_speed = None
+        if 'override_wind_speed' in self.config["platform"]:
+            self.override_wind_speed = int(self.config["platform"]['override_wind_speed'])
+
+    def load(self):
+        ret = self.config.read(self.path)
+        if len(ret) == 0:
+            self.export()
+            self.save()
+            return
+
+        self.extract()
+
+    def save(self):
+        with open(self.path, 'w') as settings_file:
+            self.config.write(settings_file)
+
+settings = Settings(SETTINGS_FILE)
 
 def time_minutes_text(m):
     trailing = m % 10
@@ -230,8 +256,8 @@ class Ui(QtWidgets.QMainWindow):
         super(Ui, self).__init__()
         uic.loadUi(PROGRAM_DIR + '/basic.ui', self)
 
-        self.platform = Platform(serial_port_name, serlal_port_baudrate)
-        self.listener = NetworkReceiver(udp_ip, udp_port)
+        self.platform = Platform(settings.serial_port_name, settings.serial_port_baudrate)
+        self.listener = NetworkReceiver(settings.udp_ip, settings.udp_port)
         self.listener.update.connect(self.udp_data_received)
 
         self.upButton = self.findChild(QtWidgets.QPushButton, 'upButton')
@@ -242,7 +268,7 @@ class Ui(QtWidgets.QMainWindow):
 
         self.defaultTimeButton = self.findChild(QtWidgets.QPushButton, 'defaultTimeButton')
         self.defaultTimeButton.clicked.connect(self.defaultTimeButtonPressed)
-        self.defaultTimeButton.setText(time_minutes_text(time_step))
+        self.defaultTimeButton.setText(time_minutes_text(settings.time_step))
 
         self.customTimeButton = self.findChild(QtWidgets.QPushButton, 'customTimeButton')
         self.customTimeButton.clicked.connect(self.customTimeButtonPressed)
@@ -353,8 +379,8 @@ class Ui(QtWidgets.QMainWindow):
     def up_process_done(self):
         self.stopped = False
         self.update_status_label()
-        if override_wind_speed is not None:
-            self.platform.set_wind(override_wind_speed)
+        if settings.override_wind_speed is not None:
+            self.platform.set_wind(settings.override_wind_speed)
         self.time_ticker.start()
 
     def upButtonPressed(self):
@@ -425,14 +451,14 @@ class Ui(QtWidgets.QMainWindow):
         self.sync_timeleft()
 
     def defaultTimeButtonPressed(self):
-        print("+", time_step, "min.")
-        self.add_timeleft(time_step * 60)
+        print("+", settings.time_step, "min.")
+        self.add_timeleft(settings.time_step * 60)
 
     def customTimeButtonPressed(self):
         print("Custom time")
 
         if self.timeleft == 0:
-            timeleft = int(time_step * 60)
+            timeleft = int(settings.time_step * 60)
         else:
             timeleft = self.timeleft
 
