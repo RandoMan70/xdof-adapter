@@ -1,5 +1,4 @@
 import serial
-import math
 import configparser
 import sys
 from PyQt5 import QtWidgets, uic
@@ -11,12 +10,28 @@ from PyQt5.QtWidgets import QInputDialog, QLineEdit, QErrorMessage
 import win32api
 import keycodes
 import os
-import random
 
 PROGRAM_DIR = os.path.dirname(os.path.abspath(__file__))
+SETTINGS_FILE = PROGRAM_DIR + "/settings.ini"
 
 config = configparser.ConfigParser()
-config.read(PROGRAM_DIR + "/settings.ini")
+ret = config.read(SETTINGS_FILE)
+
+if len(ret) == 0:
+    print("No settings, initialize defaults")
+    config["serial"] = {
+        "port_name": "COM6",
+        "port_baudrate": "115200"
+    }
+    config["network"] = {
+        "listen_addr": "127.0.0.33",
+        "listen_port": "10333"
+    }
+    config["platform"] = {
+        "time_step_minutes": "6"
+    }
+    with open(SETTINGS_FILE, 'w') as configfile:
+        config.write(configfile)
 
 serial_port_name = config["serial"]["port_name"]
 serlal_port_baudrate = int(config["serial"]["port_baudrate"])
