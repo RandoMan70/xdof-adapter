@@ -5,6 +5,7 @@ import sys
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 from PyQt5.QtGui import QIcon
+from PyQt5.QtMultimedia import QSound
 from PyQt5.QtNetwork import QUdpSocket, QHostAddress
 from PyQt5.QtWidgets import QInputDialog, QLineEdit, QErrorMessage
 import win32api
@@ -208,6 +209,9 @@ class Ui(QtWidgets.QMainWindow):
         self.app_shutdown = False
         self.timeleft = 0
 
+        self.sound_up = QSound(PROGRAM_DIR + "/sounds/up.wav")
+        self.sound_down = QSound(PROGRAM_DIR + "/sounds/down.wav")
+
         super(Ui, self).__init__()
         uic.loadUi(PROGRAM_DIR + '/basic.ui', self)
 
@@ -348,6 +352,7 @@ class Ui(QtWidgets.QMainWindow):
             return
 
         print("Up the platform")
+        self.sound_up.play()
         self.path = Path(4, self.up_process_done)
         self.path.reset([self.platform.left_front, self.platform.right_front, self.platform.rear, self.platform.angle])
         if self.listener.has_data():
@@ -367,6 +372,7 @@ class Ui(QtWidgets.QMainWindow):
 
     def downButtonPressed(self):
         print('Down the platform')
+        self.sound_down.play()
         self.stopped = True
         self.time_ticker.stop()
         self.update_status_label()
