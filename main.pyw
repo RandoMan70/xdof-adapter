@@ -70,8 +70,6 @@ class Settings:
         with open(self.path, 'w') as settings_file:
             self.config.write(settings_file)
 
-settings = Settings(SETTINGS_FILE)
-
 def time_minutes_text(m):
     trailing = m % 10
     if trailing == 1:
@@ -493,7 +491,9 @@ class Ui(QtWidgets.QMainWindow):
             except Exception as e:
                 print("Invalid time (%s):" % (e), text)
 
-app = QtWidgets.QApplication(sys.argv)
-app.setWindowIcon(QIcon(PROGRAM_DIR + '/wheel.svg'))
-window = Ui()
-app.exec_()
+if __name__ == "__main__":
+    settings = Settings(SETTINGS_FILE)
+    app = QtWidgets.QApplication(sys.argv)
+    app.setWindowIcon(QIcon(PROGRAM_DIR + '/wheel.svg'))
+    window = Ui()
+    app.exec_()
