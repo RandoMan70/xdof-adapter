@@ -417,19 +417,30 @@ class Ui(QtWidgets.QMainWindow):
 
         minutes = timeleft / 60
         seconds = timeleft % 60
-        if seconds != 0:
-            minutes +=1
+
+        text = "%d:%02d" % (minutes, seconds)
 
         while True:
             text, ok = QInputDialog.getText(self, 'Input Dialog',
-                                            'Enter your name:', QLineEdit.Normal, str(int(minutes)))
+                                            'Enter your name:', QLineEdit.Normal, text)
 
             if not ok:
                 return
             try:
-                minutes = float(text)
-                fract, minutes = math.modf(minutes)
-                seconds = fract * 60
+                parts = text.split(":")
+                if len(parts) == 1:
+                    minutes = int(parts[0])
+                    seconds = 0
+                else:
+                    (minutes, seconds) = text.split(":", 2)
+                    minutes = int(minutes)
+                    seconds = int(seconds)
+                    if seconds < 0 or seconds > 59:
+                        continue
+
+                    if minutes < 0:
+                        continue
+
                 self.set_timeleft(minutes * 60 + seconds)
                 return
             except Exception as e:
