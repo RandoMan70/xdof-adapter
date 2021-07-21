@@ -258,7 +258,7 @@
         <enum>QLayout::SetDefaultConstraint</enum>
        </property>
        <item>
-        <widget class="QLabel" name="label">
+        <widget class="QLabel" name="timeLeftLabel">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
            <horstretch>0</horstretch>
@@ -290,7 +290,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="defaultStartButton">
+        <widget class="QPushButton" name="defaultTimeButton">
          <property name="font">
           <font>
            <pointsize>20</pointsize>
@@ -299,7 +299,7 @@
           </font>
          </property>
          <property name="text">
-          <string>6 минут</string>
+          <string>+ 6 минут</string>
          </property>
         </widget>
        </item>
@@ -313,7 +313,7 @@
           </font>
          </property>
          <property name="text">
-          <string>Произвольное время</string>
+          <string>Задать время</string>
          </property>
         </widget>
        </item>

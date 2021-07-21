@@ -1,21 +1,44 @@
 import serial
-import socket
+import math
+import configparser
 import sys
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 from PyQt5.QtGui import QIcon
 from PyQt5.QtNetwork import QUdpSocket, QHostAddress
+from PyQt5.QtWidgets import QInputDialog, QLineEdit, QErrorMessage
 import win32api
 import keycodes
 import os
+import random
 
-serial_port_name = "COM6"
-serlal_port_baudrate = 115200
-
-udp_ip = "127.0.0.33"
-udp_port = 10333
 PROGRAM_DIR = os.path.dirname(os.path.abspath(__file__))
 
+config = configparser.ConfigParser()
+config.read(PROGRAM_DIR + "/settings.ini")
+
+serial_port_name = config["serial"]["port_name"]
+serlal_port_baudrate = int(config["serial"]["port_baudrate"])
+
+udp_ip = config["network"]["listen_addr"]
+udp_port = int(config["network"]["listen_port"])
+
+
+time_step = int(config["platform"]["time_step_minutes"])
+
+override_wind_speed = None
+if 'override_wind_speed' in config["platform"]:
+    override_wind_speed = int(config["platform"]['override_wind_speed'])
+
+def time_minutes_text(m):
+    trailing = m % 10
+    if trailing == 1:
+        return "+ " + str(m) + " минута"
+
+    if trailing < 5:
+        return "+ " + str(m) + " минуты"
+
+    return "+ " + str(m) + " минут"
 
 class NetworkReceiver(QObject):
     update = pyqtSignal()
@@ -183,6 +206,7 @@ class Ui(QtWidgets.QMainWindow):
     def __init__(self):
         self.stopped = True
         self.app_shutdown = False
+        self.timeleft = 0
 
         super(Ui, self).__init__()
         uic.loadUi(PROGRAM_DIR + '/basic.ui', self)
@@ -196,6 +220,15 @@ class Ui(QtWidgets.QMainWindow):
 
         self.downButton = self.findChild(QtWidgets.QPushButton, 'downButton')
         self.downButton.clicked.connect(self.downButtonPressed)
+
+        self.defaultTimeButton = self.findChild(QtWidgets.QPushButton, 'defaultTimeButton')
+        self.defaultTimeButton.clicked.connect(self.defaultTimeButtonPressed)
+        self.defaultTimeButton.setText(time_minutes_text(time_step))
+
+        self.customTimeButton = self.findChild(QtWidgets.QPushButton, 'customTimeButton')
+        self.customTimeButton.clicked.connect(self.customTimeButtonPressed)
+
+        self.timeLeftLabel = self.findChild(QtWidgets.QLabel, 'timeLeftLabel')
 
         self.platformLeftFront = self.findChild(QtWidgets.QProgressBar, 'platformLeftFront')
         self.platformRightFront = self.findChild(QtWidgets.QProgressBar, 'platformRightFront')
@@ -212,7 +245,11 @@ class Ui(QtWidgets.QMainWindow):
         self.timer.setInterval(20)
         self.timer.timeout.connect(self.timer_timeout)
 
-        self.keychecker = KeyChecker(["f11", "f12"])
+        self.time_ticker = QTimer()
+        self.time_ticker.setInterval(1000)
+        self.time_ticker.timeout.connect(self.tick_timeleft)
+
+        self.keychecker = KeyChecker(["f10", "f11", "f12"])
         self.keychecker.pressed.connect(self.pressed)
         self.keycheck_timer = QTimer()
         self.keycheck_timer.setInterval((20))
@@ -236,6 +273,9 @@ class Ui(QtWidgets.QMainWindow):
         event.ignore()
 
     def pressed(self, key):
+        if key == "f10":
+            self.defaultTimeButtonPressed()
+
         if key == "f11":
             self.upButton.clicked.emit()
 
@@ -294,13 +334,20 @@ class Ui(QtWidgets.QMainWindow):
     def up_process_done(self):
         self.stopped = False
         self.update_status_label()
-        self.platform.set_wind(255)
+        if override_wind_speed is not None:
+            self.platform.set_wind(override_wind_speed)
+        self.time_ticker.start()
 
     def upButtonPressed(self):
         if self.app_shutdown:
+            print("Stopping")
             return
 
-        print("UP!")
+        if self.timeleft <= 0:
+            print("No time left")
+            return
+
+        print("Up the platform")
         self.path = Path(4, self.up_process_done)
         self.path.reset([self.platform.left_front, self.platform.right_front, self.platform.rear, self.platform.angle])
         if self.listener.has_data():
@@ -319,8 +366,9 @@ class Ui(QtWidgets.QMainWindow):
             sys.exit()
 
     def downButtonPressed(self):
-        print('DOWN!')
+        print('Down the platform')
         self.stopped = True
+        self.time_ticker.stop()
         self.update_status_label()
         self.platform.set_wind(0)
         self.path = Path(4, self.down_process_done)
@@ -333,6 +381,59 @@ class Ui(QtWidgets.QMainWindow):
 
         self.timer.start()
 
+    def sync_timeleft(self):
+        minutes = self.timeleft / 60
+        seconds = self.timeleft % 60
+        self.timeLeftLabel.setText("%d:%02d" % (minutes, seconds))
+
+    def add_timeleft(self, seconds):
+        self.timeleft += seconds
+        self.sync_timeleft()
+
+    def set_timeleft(self, seconds):
+        self.timeleft = seconds
+        self.sync_timeleft()
+
+    def tick_timeleft(self):
+        self.timeleft -= 1
+        if self.timeleft <= 0:
+            self.timeleft = 0
+            self.time_ticker.stop()
+            self.downButtonPressed()
+
+        self.sync_timeleft()
+
+    def defaultTimeButtonPressed(self):
+        print("+", time_step, "min.")
+        self.add_timeleft(time_step * 60)
+
+    def customTimeButtonPressed(self):
+        print("Custom time")
+
+        if self.timeleft == 0:
+            timeleft = int(time_step * 60)
+        else:
+            timeleft = self.timeleft
+
+        minutes = timeleft / 60
+        seconds = timeleft % 60
+        if seconds != 0:
+            minutes +=1
+
+        while True:
+            text, ok = QInputDialog.getText(self, 'Input Dialog',
+                                            'Enter your name:', QLineEdit.Normal, str(int(minutes)))
+
+            if not ok:
+                return
+            try:
+                minutes = float(text)
+                fract, minutes = math.modf(minutes)
+                seconds = fract * 60
+                self.set_timeleft(minutes * 60 + seconds)
+                return
+            except Exception as e:
+                print("Invalid time (%s):" % (e), text)
 
 app = QtWidgets.QApplication(sys.argv)
 app.setWindowIcon(QIcon(PROGRAM_DIR + '/wheel.svg'))
